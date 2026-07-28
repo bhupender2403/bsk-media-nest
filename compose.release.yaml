@@ -1,0 +1,8 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to a published image}
+    build: !reset null
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to a published image}
+    build: !reset null

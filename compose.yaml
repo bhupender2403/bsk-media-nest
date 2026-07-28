@@ -1,0 +1,21 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    image: ${BACKEND_IMAGE:-bsk-media-nest-backend:local}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    image: ${FRONTEND_IMAGE:-bsk-media-nest-frontend:local}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
