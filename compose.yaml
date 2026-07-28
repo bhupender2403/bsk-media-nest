@@ -1,4 +1,23 @@
 services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bsk_media_nest}
+      POSTGRES_USER: ${POSTGRES_USER:-bsk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-bsk} -d ${POSTGRES_DB:-bsk_media_nest}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -6,6 +25,10 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bsk}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-bsk_media_nest}
+    depends_on:
+      db:
+        condition: service_healthy
     expose:
       - "8000"
 
@@ -19,3 +42,6 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  postgres_data:

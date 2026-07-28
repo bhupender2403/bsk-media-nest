@@ -1,7 +1,7 @@
 # BSK Media Nest
 
-A Docker-managed application with a FastAPI backend and a React + TypeScript
-frontend.
+A Docker-managed application with a FastAPI backend, PostgreSQL database, and
+a React + TypeScript frontend.
 
 ## Requirements
 
@@ -38,8 +38,40 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build
 - Frontend: <http://localhost:5173>
 - Backend API docs: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/api/health>
+- PostgreSQL: `localhost:5432`
 
 Changes under `frontend/src` or `backend/app` reload automatically.
+
+## Image folder catalog
+
+Use **Select folder** in the web interface to choose a local directory. The
+browser sends metadata for supported image files to the backend, and PostgreSQL
+stores the folder once. Selecting the same folder name again returns the
+existing record instead of creating a duplicate.
+
+For privacy, browsers do not reveal absolute paths such as
+`/Users/example/Pictures`. The catalog stores the selected folder name and each
+image's relative path, media type, size, and modification time. Image file
+contents are not uploaded.
+
+## PostgreSQL
+
+Docker Compose creates the database automatically and provides the backend with
+this internal connection URL:
+
+```text
+postgresql+psycopg://bsk:change-me@db:5432/bsk_media_nest
+```
+
+Set `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in `.env` before
+deployment. Database files persist in the `postgres_data` Docker volume when
+containers are stopped or recreated.
+
+Connect from the host while the development stack is running:
+
+```bash
+docker compose exec db psql -U bsk -d bsk_media_nest
+```
 
 ## Test
 
@@ -70,6 +102,9 @@ GitHub Container Registry whenever a version tag such as `v1.0.0` is pushed.
 
    ```dotenv
    FRONTEND_PORT=8080
+   POSTGRES_DB=bsk_media_nest
+   POSTGRES_USER=bsk
+   POSTGRES_PASSWORD=replace-with-a-strong-password
    BACKEND_IMAGE=ghcr.io/bhupender2403/bsk-media-nest-backend:1.0.0
    FRONTEND_IMAGE=ghcr.io/bhupender2403/bsk-media-nest-frontend:1.0.0
    ```
@@ -95,7 +130,7 @@ and support than the Docker distribution.
 backend/                   FastAPI application and tests
 frontend/                  React + TypeScript application and Nginx config
 .github/workflows/         Multi-platform container publishing
-compose.yaml               Normal/local production stack
+compose.yaml               App stack and persistent PostgreSQL service
 compose.dev.yaml           Live-reload development overrides
 compose.release.yaml       Published-image release overrides
 ```
