@@ -49,6 +49,7 @@ type MediaFile = {
 type MediaKindFilter = "all" | "image" | "video";
 type RatingFilter = "all" | "unrated" | "1" | "2" | "3" | "4" | "5";
 type SidebarView = "folders" | "jobs";
+type DisplayMode = "small" | "large" | "slideshow";
 
 export default function App() {
   const [folders, setFolders] = useState<ImageFolder[]>([]);
@@ -65,6 +66,8 @@ export default function App() {
     useState<MediaKindFilter>("all");
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [sidebarView, setSidebarView] = useState<SidebarView>("folders");
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("large");
+  const [selectedSlideId, setSelectedSlideId] = useState<number | null>(null);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -256,6 +259,40 @@ export default function App() {
   );
   const hasActiveFilters =
     mediaKindFilter !== "all" || ratingFilter !== "all";
+  const slideshowFiles = useMemo(
+    () => filteredMediaFiles.filter((file) => file.media_kind === "image"),
+    [filteredMediaFiles],
+  );
+  const selectedSlide =
+    slideshowFiles.find((file) => file.id === selectedSlideId) ??
+    slideshowFiles[0] ??
+    null;
+
+  useEffect(() => {
+    if (displayMode !== "slideshow") return;
+    setSelectedSlideId((current) =>
+      current !== null && slideshowFiles.some((file) => file.id === current)
+        ? current
+        : (slideshowFiles[0]?.id ?? null),
+    );
+  }, [displayMode, slideshowFiles]);
+
+  const changeDisplayMode = (mode: DisplayMode) => {
+    setDisplayMode(mode);
+    if (mode === "slideshow") {
+      setMediaKindFilter("image");
+    }
+  };
+
+  const moveSlide = (direction: -1 | 1) => {
+    if (selectedSlide === null || slideshowFiles.length < 2) return;
+    const currentIndex = slideshowFiles.findIndex(
+      (file) => file.id === selectedSlide.id,
+    );
+    const nextIndex =
+      (currentIndex + direction + slideshowFiles.length) % slideshowFiles.length;
+    setSelectedSlideId(slideshowFiles[nextIndex].id);
+  };
 
   const rateMedia = async (file: MediaFile, rating: number) => {
     setSavingRatingMd5(file.md5);
@@ -483,6 +520,48 @@ export default function App() {
                 Clear filters
               </button>
             )}
+            <div
+              className="display-modes"
+              role="group"
+              aria-label="Media display"
+            >
+              <button
+                type="button"
+                className={displayMode === "small" ? "active" : ""}
+                aria-label="Small icons"
+                aria-pressed={displayMode === "small"}
+                title="Small icons"
+                onClick={() => changeDisplayMode("small")}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 3h5v5H3V3Zm6.5 0h5v5h-5V3ZM16 3h5v5h-5V3ZM3 9.5h5v5H3v-5Zm6.5 0h5v5h-5v-5Zm6.5 0h5v5h-5v-5ZM3 16h5v5H3v-5Zm6.5 0h5v5h-5v-5Zm6.5 0h5v5h-5v-5Z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={displayMode === "large" ? "active" : ""}
+                aria-label="Large icons"
+                aria-pressed={displayMode === "large"}
+                title="Large icons"
+                onClick={() => changeDisplayMode("large")}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm10 0h8v8h-8v-8Z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={displayMode === "slideshow" ? "active" : ""}
+                aria-label="Slideshow"
+                aria-pressed={displayMode === "slideshow"}
+                title="Slideshow"
+                onClick={() => changeDisplayMode("slideshow")}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 4h16v13H4V4Zm2 2v9h12V6H6Zm3 13h6v2H9v-2Zm1-11 5 2.5-5 2.5V8Z" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
 
@@ -514,12 +593,155 @@ export default function App() {
               Clear filters
             </button>
           </div>
+        ) : displayMode === "slideshow" ? (
+          slideshowFiles.length === 0 || selectedSlide === null ? (
+            <div className="gallery-empty">
+              <div className="empty-icon" aria-hidden="true">◇</div>
+              <h3>No images for slideshow</h3>
+              <p>Change the filters or choose a folder containing images.</p>
+            </div>
+          ) : (
+            <section className="slideshow" aria-label="Image slideshow">
+              <div className="slide-viewer">
+                <div className="slide-stage">
+                  <button
+                    className="slide-navigation previous"
+                    type="button"
+                    aria-label="Previous image"
+                    disabled={slideshowFiles.length < 2}
+                    onClick={() => moveSlide(-1)}
+                  >
+                    ‹
+                  </button>
+                  <img
+                    src={apiUrl(selectedSlide.content_url)}
+                    alt={fileName(selectedSlide.relative_path)}
+                  />
+                  <button
+                    className="slide-navigation next"
+                    type="button"
+                    aria-label="Next image"
+                    disabled={slideshowFiles.length < 2}
+                    onClick={() => moveSlide(1)}
+                  >
+                    ›
+                  </button>
+                </div>
+                <aside className="slide-info" aria-label="Image information">
+                  <p className="section-label">IMAGE INFO</p>
+                  <h3>{fileName(selectedSlide.relative_path)}</h3>
+                  <dl>
+                    <div>
+                      <dt>Path</dt>
+                      <dd title={selectedSlide.relative_path}>
+                        {selectedSlide.relative_path}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Format</dt>
+                      <dd>{selectedSlide.media_type}</dd>
+                    </div>
+                    <div>
+                      <dt>Size</dt>
+                      <dd>{fileSize(selectedSlide.size)}</dd>
+                    </div>
+                    <div>
+                      <dt>MD5</dt>
+                      <dd title={selectedSlide.md5}>{selectedSlide.md5}</dd>
+                    </div>
+                    <div>
+                      <dt>Rating</dt>
+                      <dd className="info-rating">
+                        <span className="info-rating-stars" aria-hidden="true">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <span
+                              className={
+                                star <= (selectedSlide.rating ?? 0)
+                                  ? "filled"
+                                  : ""
+                              }
+                              key={star}
+                            >
+                              {star <= (selectedSlide.rating ?? 0) ? "★" : "☆"}
+                            </span>
+                          ))}
+                        </span>
+                        <span>
+                          {selectedSlide.rating === null
+                            ? "Not rated"
+                            : `${selectedSlide.rating} of 5 stars`}
+                        </span>
+                      </dd>
+                    </div>
+                  </dl>
+                </aside>
+              </div>
+              <div className="slide-controls">
+                <div
+                  className="rating slide-rating"
+                  aria-label={
+                    selectedSlide.rating === null
+                      ? "Not rated"
+                      : `${selectedSlide.rating} out of 5 stars`
+                  }
+                >
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      className={
+                        star <= (selectedSlide.rating ?? 0) ? "filled" : ""
+                      }
+                      type="button"
+                      key={star}
+                      aria-label={`Rate ${fileName(selectedSlide.relative_path)} ${star} star${star === 1 ? "" : "s"}`}
+                      aria-pressed={star === selectedSlide.rating}
+                      disabled={savingRatingMd5 === selectedSlide.md5}
+                      onClick={() => void rateMedia(selectedSlide, star)}
+                    >
+                      {star <= (selectedSlide.rating ?? 0) ? "★" : "☆"}
+                    </button>
+                  ))}
+                </div>
+                <span>
+                  {slideshowFiles.findIndex(
+                    (file) => file.id === selectedSlide.id,
+                  ) + 1}
+                  {" / "}
+                  {slideshowFiles.length}
+                </span>
+              </div>
+              <div className="slide-thumbnails" aria-label="Slideshow images">
+                {slideshowFiles.map((file) => (
+                  <button
+                    type="button"
+                    key={file.id}
+                    className={file.id === selectedSlide.id ? "active" : ""}
+                    aria-label={`Show ${fileName(file.relative_path)}, ${
+                      file.rating === null
+                        ? "not rated"
+                        : `rated ${file.rating} stars`
+                    }`}
+                    aria-pressed={file.id === selectedSlide.id}
+                    onClick={() => setSelectedSlideId(file.id)}
+                  >
+                    <img
+                      src={apiUrl(file.content_url)}
+                      alt=""
+                      loading="lazy"
+                    />
+                    <span className="thumbnail-rating" aria-hidden="true">
+                      {file.rating === null ? "☆" : `★ ${file.rating}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )
         ) : (
-          <div className="media-grid">
+          <div className={`media-grid ${displayMode}`}>
             {filteredMediaFiles.map((file) => (
               <article className="media-card" key={file.id}>
                 <div className="preview">
-                  {["image", "video"].includes(file.media_kind) && (
+                  {file.media_kind === "image" && (
                     <img
                       src={apiUrl(file.content_url)}
                       alt={fileName(file.relative_path)}
@@ -548,7 +770,7 @@ export default function App() {
                     {fileName(file.relative_path)}
                   </strong>
                   <span>{file.media_kind} · {fileSize(file.size)}</span>
-                  {file.media_kind === "image" && (
+                  {["image", "video"].includes(file.media_kind) && (
                     <div
                       className="rating"
                       aria-label={
