@@ -38,6 +38,7 @@ type MediaFile = {
   media_kind: "image" | "video" | "audio" | "other";
   size: number;
   md5: string;
+  rating: number | null;
   content_url: string;
 };
 
@@ -51,6 +52,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [folderPath, setFolderPath] = useState("");
+  const [savingRatingMd5, setSavingRatingMd5] = useState<string | null>(null);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -185,6 +187,28 @@ export default function App() {
   const selectedFolder = folders.find(
     (folder) => folder.id === selectedFolderId,
   );
+
+  const ratePhoto = async (file: MediaFile, rating: number) => {
+    setSavingRatingMd5(file.md5);
+    try {
+      const response = await fetch(apiUrl(`/api/files/${file.id}/rating`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating }),
+      });
+      if (!response.ok) throw new Error("Unable to save rating");
+      const saved = (await response.json()) as { md5: string; rating: number };
+      setMediaFiles((current) =>
+        current.map((item) =>
+          item.md5 === saved.md5 ? { ...item, rating: saved.rating } : item,
+        ),
+      );
+    } catch {
+      setNotice("Could not save the photo rating.");
+    } finally {
+      setSavingRatingMd5(null);
+    }
+  };
 
   const fileName = (path: string) => path.split("/").at(-1) ?? path;
   const fileSize = (size: number) => {
@@ -345,6 +369,30 @@ export default function App() {
                     {fileName(file.relative_path)}
                   </strong>
                   <span>{file.media_kind} · {fileSize(file.size)}</span>
+                  {file.media_kind === "image" && (
+                    <div
+                      className="rating"
+                      aria-label={
+                        file.rating === null
+                          ? "Not rated"
+                          : `${file.rating} out of 5 stars`
+                      }
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          className={star <= (file.rating ?? 0) ? "filled" : ""}
+                          type="button"
+                          key={star}
+                          aria-label={`Rate ${fileName(file.relative_path)} ${star} star${star === 1 ? "" : "s"}`}
+                          aria-pressed={star === file.rating}
+                          disabled={savingRatingMd5 === file.md5}
+                          onClick={() => void ratePhoto(file, star)}
+                        >
+                          {star <= (file.rating ?? 0) ? "★" : "☆"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </article>
             ))}

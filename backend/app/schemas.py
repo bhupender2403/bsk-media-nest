@@ -57,4 +57,14 @@ class FileRecordSummary(BaseModel):
     media_kind: str
     size: int
     md5: str
+    rating: int | None
     content_url: str
+
+
+class RatingUpdate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+
+
+class FileRating(BaseModel):
+    md5: str
+    rating: int

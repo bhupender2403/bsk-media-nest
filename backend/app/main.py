@@ -15,8 +15,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db, initialize_schema
-from app.models import FileRecord, ImageFile, ImageFolder, ImportJob, ImportJobItem
+from app.models import (
+    FileRecord,
+    ImageFile,
+    ImageFolder,
+    ImportJob,
+    ImportJobItem,
+    PhotoRating,
+)
 from app.schemas import (
+    FileRating,
     ImageFolderCreate,
     ImageFolderCreateResult,
     ImageFolderSummary,
@@ -24,6 +32,7 @@ from app.schemas import (
     FileRecordSummary,
     FolderScanCreate,
     FolderSelectionResult,
+    RatingUpdate,
 )
 from app.worker import run as run_worker
 
@@ -176,8 +185,9 @@ def list_folder_files(
 ) -> list[FileRecordSummary]:
     if db.get(ImageFolder, folder_id) is None:
         raise HTTPException(status_code=404, detail="Folder not found.")
-    records = db.scalars(
-        select(FileRecord)
+    rows = db.execute(
+        select(FileRecord, PhotoRating.rating)
+        .outerjoin(PhotoRating, PhotoRating.md5 == FileRecord.unique_md5)
         .where(FileRecord.folder_id == folder_id)
         .order_by(FileRecord.relative_path)
     ).all()
@@ -189,10 +199,38 @@ def list_folder_files(
             media_kind=record.media_kind,
             size=record.size,
             md5=record.unique_md5,
+            rating=rating,
             content_url=f"/api/files/{record.id}/content",
         )
-        for record in records
+        for record, rating in rows
     ]
+
+
+@app.put("/api/files/{file_id}/rating", response_model=FileRating)
+def set_file_rating(
+    file_id: int,
+    payload: RatingUpdate,
+    db: Session = Depends(get_db),
+) -> FileRating:
+    record = db.get(FileRecord, file_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="File not found.")
+    if record.media_kind != "image":
+        raise HTTPException(status_code=400, detail="Only images can be rated.")
+
+    rating = db.get(PhotoRating, record.unique_md5)
+    if rating is None:
+        rating = PhotoRating(
+            md5=record.unique_md5,
+            rating=payload.rating,
+            updated_at=datetime.now(UTC),
+        )
+        db.add(rating)
+    else:
+        rating.rating = payload.rating
+        rating.updated_at = datetime.now(UTC)
+    db.commit()
+    return FileRating(md5=record.unique_md5, rating=rating.rating)
 
 
 @app.get("/api/files/{file_id}/content", response_class=FileResponse)

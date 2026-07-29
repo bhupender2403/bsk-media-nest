@@ -422,6 +422,46 @@ input {
   text-transform: capitalize;
 }
 
+.rating {
+  display: flex;
+  gap: 0.12rem;
+  margin-top: 0.25rem;
+}
+
+.rating button {
+  padding: 0;
+  border: 0;
+  color: #677383;
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.rating button:hover,
+.rating button:focus-visible,
+.rating button.filled {
+  color: #f2b956;
+}
+
+.rating button:hover {
+  transform: scale(1.15);
+}
+
+.rating:hover button {
+  color: #ffd166;
+}
+
+.rating button:hover ~ button {
+  color: #677383;
+}
+
+.rating button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;

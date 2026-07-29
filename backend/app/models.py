@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -51,6 +60,20 @@ class UniqueFile(Base):
     media_type: Mapped[str] = mapped_column(String(100))
     media_kind: Mapped[str] = mapped_column(String(20), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PhotoRating(Base):
+    __tablename__ = "photo_ratings"
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_photo_rating_range"),
+    )
+
+    md5: Mapped[str] = mapped_column(
+        ForeignKey("unique_files.md5", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    rating: Mapped[int] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class FileRecord(Base):
