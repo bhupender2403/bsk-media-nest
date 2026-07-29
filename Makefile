@@ -1,4 +1,4 @@
-.PHONY: dev restart stop db-up db-down db-logs backend worker frontend test
+.PHONY: dev restart stop db-up db-down db-clear db-logs backend worker frontend test
 
 dev: db-up
 	@cleanup() { \
@@ -22,6 +22,14 @@ db-up:
 
 db-down:
 	docker compose down
+
+db-clear:
+	@printf "Delete all PostgreSQL data for this project? [y/N] "; \
+	read answer; \
+	case "$$answer" in \
+		y|Y|yes|YES) docker compose down --volumes ;; \
+		*) echo "Database clear cancelled." ;; \
+	esac
 
 db-logs:
 	docker compose logs -f db
