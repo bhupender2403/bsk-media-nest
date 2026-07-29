@@ -25,3 +25,36 @@ class ImageFolderSummary(BaseModel):
 class ImageFolderCreateResult(BaseModel):
     created: bool
     folder: ImageFolderSummary
+
+
+class ImportJobSummary(BaseModel):
+    id: str
+    folder_id: int
+    folder_name: str
+    status: str
+    total_files: int
+    processed_files: int
+    imported_files: int
+    failed_files: int
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class FolderScanCreate(BaseModel):
+    folder_path: str = Field(min_length=1, max_length=2048)
+
+
+class FolderSelectionResult(BaseModel):
+    path: str | None
+
+
+class FileRecordSummary(BaseModel):
+    id: int
+    relative_path: str
+    media_type: str
+    media_kind: str
+    size: int
+    md5: str
+    content_url: str

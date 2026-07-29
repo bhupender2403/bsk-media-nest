@@ -11,3 +11,8 @@ __pycache__/
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
+backend/.data/
+backend/.desktop-build/
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/

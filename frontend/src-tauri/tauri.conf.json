@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BSK Media Nest",
+  "version": "0.1.0",
+  "identifier": "com.bskmedianest.desktop",
+  "build": {
+    "beforeDevCommand": "make -C .. desktop-services",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "make -C .. desktop-build-assets",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BSK Media Nest",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:8765; img-src 'self' asset: http://asset.localhost http://127.0.0.1:8765 data: blob:; media-src 'self' http://127.0.0.1:8765 blob:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": [
+      "binaries/bsk-media-nest-api"
+    ],
+    "targets": "all",
+    "category": "Photography",
+    "shortDescription": "Catalog local photos, video, and audio without copying files"
+  }
+}
