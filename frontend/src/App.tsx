@@ -10,6 +10,8 @@ const isDesktop = window.__TAURI_INTERNALS__ !== undefined;
 const apiBaseUrl =
   import.meta.env.VITE_API_URL || (isDesktop ? "http://127.0.0.1:8765" : "");
 const apiUrl = (path: string) => `${apiBaseUrl}${path}`;
+const isJobActive = (job: ImportJob) =>
+  job.status === "pending" || job.status === "processing";
 
 type ImageFolder = {
   id: number;
@@ -53,6 +55,7 @@ export default function App() {
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [folderPath, setFolderPath] = useState("");
   const [savingRatingMd5, setSavingRatingMd5] = useState<string | null>(null);
+  const [mediaRevision, setMediaRevision] = useState(0);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -79,20 +82,34 @@ export default function App() {
       if (!response.ok) throw new Error("API request failed");
       const nextJobs = (await response.json()) as ImportJob[];
       setJobs(nextJobs);
+      return nextJobs;
     } catch {
       setConnected(false);
+      return null;
     }
   }, []);
 
   useEffect(() => {
     void loadFolders();
     void loadJobs();
+  }, [loadFolders, loadJobs]);
+
+  const hasActiveJobs = jobs.some(isJobActive);
+
+  useEffect(() => {
+    if (!hasActiveJobs) return;
+
     const refreshTimer = window.setInterval(() => {
-      void loadFolders();
-      void loadJobs();
+      void (async () => {
+        const nextJobs = await loadJobs();
+        if (nextJobs && !nextJobs.some(isJobActive)) {
+          await loadFolders();
+          setMediaRevision((current) => current + 1);
+        }
+      })();
     }, 2000);
     return () => window.clearInterval(refreshTimer);
-  }, [loadFolders, loadJobs]);
+  }, [hasActiveJobs, loadFolders, loadJobs]);
 
   useEffect(() => {
     if (selectedFolderId === null) {
@@ -114,7 +131,7 @@ export default function App() {
       }
     };
     void loadMedia();
-  }, [selectedFolderId, jobs]);
+  }, [selectedFolderId, mediaRevision]);
 
   const importFolder = async (path: string) => {
     if (!path.trim()) return;
@@ -135,7 +152,11 @@ export default function App() {
       setNotice(`Indexing “${job.folder_name}” without copying files.`);
       setSelectedFolderId(job.folder_id);
       await loadFolders();
-      await loadJobs();
+      const nextJobs = await loadJobs();
+      if (nextJobs && !nextJobs.some(isJobActive)) {
+        await loadFolders();
+        setMediaRevision((current) => current + 1);
+      }
     } catch (error) {
       setNotice(
         error instanceof Error ? error.message : "Could not scan the folder.",
