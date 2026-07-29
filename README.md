@@ -82,9 +82,12 @@ Open <http://localhost:5173>. API documentation is available at
 
 The browser cannot reveal an absolute folder path itself. For local
 development, the **Choose folder** button asks FastAPI to open the operating
-system's folder dialog and return the selection. The manual path field remains
-available as a fallback. This helper only works when FastAPI runs on the same
-desktop as the browser.
+system's folder dialog and return the selection. This helper only works when
+FastAPI runs on the same desktop as the browser.
+
+Removing a folder from the sidebar deletes its catalog, location, and import
+job records. Original media files are never deleted, and MD5 ratings are kept
+so they return if the same content is imported again.
 
 Press `Ctrl+C` to stop the development services.
 
@@ -123,6 +126,9 @@ make dev       # browser development
 make test      # backend tests, frontend lint, and frontend build
 make db-clear  # permanently clear the local SQLite database after confirmation
 ```
+
+Stop `make dev` or `make desktop` with `Ctrl+C` before running
+`make db-clear`.
 
 ## Project layout
 

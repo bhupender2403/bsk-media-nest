@@ -9,8 +9,8 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from sqlalchemy import case, func, select
+from fastapi.responses import FileResponse, Response
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -210,6 +210,39 @@ def list_folders(db: Session = Depends(get_db)) -> list[ImageFolderSummary]:
         )
         for folder, image_count, movie_count, pending_rating_count in rows
     ]
+
+
+@app.delete("/api/folders/{folder_id}", status_code=204)
+def remove_folder(
+    folder_id: int,
+    db: Session = Depends(get_db),
+) -> Response:
+    folder = db.get(ImageFolder, folder_id)
+    if folder is None:
+        raise HTTPException(status_code=404, detail="Folder not found.")
+
+    active_job = db.scalar(
+        select(ImportJob.id)
+        .where(
+            ImportJob.folder_id == folder_id,
+            ImportJob.status.in_(["pending", "processing"]),
+        )
+        .limit(1)
+    )
+    if active_job is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Wait for the active import to finish before removing this folder.",
+        )
+
+    job_ids = select(ImportJob.id).where(ImportJob.folder_id == folder_id)
+    db.execute(delete(ImportJobItem).where(ImportJobItem.job_id.in_(job_ids)))
+    db.execute(delete(ImportJob).where(ImportJob.folder_id == folder_id))
+    db.execute(delete(FileRecord).where(FileRecord.folder_id == folder_id))
+    db.execute(delete(ImageFile).where(ImageFile.folder_id == folder_id))
+    db.delete(folder)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get(

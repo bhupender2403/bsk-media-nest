@@ -26,7 +26,7 @@ input {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 376px minmax(0, 1fr);
   background:
     radial-gradient(circle at 90% 10%, rgb(35 134 255 / 10%), transparent 28%),
     #090d12;
@@ -34,12 +34,71 @@ input {
 
 .sidebar {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  padding: 2rem 1.25rem 1.5rem;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
   border-right: 1px solid #252b35;
   background: rgb(14 19 26 / 92%);
   backdrop-filter: blur(20px);
+}
+
+.sidebar-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 1rem 0.55rem;
+  border-right: 1px solid #252b35;
+  background: #0a0f16;
+}
+
+.sidebar-rail button {
+  position: relative;
+  width: 2.45rem;
+  height: 2.45rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: #697789;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.sidebar-rail button:hover {
+  color: #d6dee8;
+  background: #171f2a;
+}
+
+.sidebar-rail button.active {
+  color: #79bdff;
+  background: rgb(56 139 253 / 16%);
+}
+
+.sidebar-rail svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: currentcolor;
+}
+
+.rail-indicator {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border: 2px solid #0a0f16;
+  border-radius: 50%;
+  background: #3fb950;
+}
+
+.sidebar-panel {
+  min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 1.25rem 1.5rem;
 }
 
 .brand {
@@ -79,28 +138,6 @@ input {
   margin: 1.5rem 0.65rem 2rem;
 }
 
-.import-action label {
-  color: #8f9baa;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.import-action input {
-  width: 100%;
-  padding: 0.7rem 0.75rem;
-  border: 1px solid #303945;
-  border-radius: 9px;
-  outline: none;
-  color: #f4f7fb;
-  background: #090d12;
-  font-size: 0.78rem;
-}
-
-.import-action input:focus {
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 3px rgb(56 139 253 / 12%);
-}
-
 .picker {
   width: 100%;
   padding: 0.8rem 1rem;
@@ -121,23 +158,6 @@ input {
 }
 
 .picker:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.path-import {
-  border: 0;
-  color: #8b98a8;
-  background: transparent;
-  font-size: 0.76rem;
-  cursor: pointer;
-}
-
-.path-import:hover {
-  color: #d6dee8;
-}
-
-.path-import:disabled {
   opacity: 0.6;
   cursor: wait;
 }
@@ -164,13 +184,17 @@ input {
   font-size: 0.82rem;
 }
 
+.folder-row {
+  position: relative;
+}
+
 .folder {
   width: 100%;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.7rem;
+  padding: 0.7rem 2.5rem 0.7rem 0.7rem;
   border: 1px solid transparent;
   border-radius: 10px;
   color: inherit;
@@ -186,6 +210,31 @@ input {
 .folder.selected {
   border-color: rgb(56 139 253 / 35%);
   background: rgb(56 139 253 / 12%);
+}
+
+.remove-folder {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #667384;
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.remove-folder:hover,
+.remove-folder:focus-visible {
+  color: #ff8f8f;
+  background: rgb(248 81 73 / 13%);
 }
 
 .folder .pending-rating {
@@ -557,6 +606,10 @@ input {
     border-bottom: 1px solid #252b35;
   }
 
+  .sidebar-panel {
+    min-height: auto;
+  }
+
   .catalog {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
@@ -564,10 +617,6 @@ input {
   .catalog > h2,
   .empty {
     grid-column: 1 / -1;
-  }
-
-  .jobs {
-    display: none;
   }
 
   .status {

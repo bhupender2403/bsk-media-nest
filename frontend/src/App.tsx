@@ -48,6 +48,7 @@ type MediaFile = {
 
 type MediaKindFilter = "all" | "image" | "video";
 type RatingFilter = "all" | "unrated" | "1" | "2" | "3" | "4" | "5";
+type SidebarView = "folders" | "jobs";
 
 export default function App() {
   const [folders, setFolders] = useState<ImageFolder[]>([]);
@@ -58,12 +59,12 @@ export default function App() {
   const [notice, setNotice] = useState("Choose a media folder to import.");
   const [saving, setSaving] = useState(false);
   const [loadingMedia, setLoadingMedia] = useState(false);
-  const [folderPath, setFolderPath] = useState("");
   const [savingRatingMd5, setSavingRatingMd5] = useState<string | null>(null);
   const [mediaRevision, setMediaRevision] = useState(0);
   const [mediaKindFilter, setMediaKindFilter] =
     useState<MediaKindFilter>("all");
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
+  const [sidebarView, setSidebarView] = useState<SidebarView>("folders");
 
   const loadFolders = useCallback(async () => {
     try {
@@ -174,11 +175,6 @@ export default function App() {
     }
   };
 
-  const scanFolder = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void importFolder(folderPath);
-  };
-
   const selectFolder = async () => {
     try {
       let selected: string | null = null;
@@ -201,7 +197,6 @@ export default function App() {
         selected = body.path;
       }
       if (typeof selected === "string") {
-        setFolderPath(selected);
         await importFolder(selected);
       }
     } catch (error) {
@@ -209,6 +204,34 @@ export default function App() {
         error instanceof Error
           ? error.message
           : "The native folder picker is unavailable.",
+      );
+    }
+  };
+
+  const removeFolder = async (folder: ImageFolder) => {
+    const confirmed = window.confirm(
+      `Remove “${folder.name}” from the catalog? Original media files will not be deleted.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(apiUrl(`/api/folders/${folder.id}`), {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { detail?: string };
+        throw new Error(body.detail || "Unable to remove folder");
+      }
+      if (selectedFolderId === folder.id) {
+        setSelectedFolderId(null);
+        setMediaFiles([]);
+      }
+      setNotice(`Removed “${folder.name}” from the catalog.`);
+      await loadFolders();
+      await loadJobs();
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Could not remove the folder.",
       );
     }
   };
@@ -266,25 +289,44 @@ export default function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
+        <nav className="sidebar-rail" aria-label="Library sections">
+          <button
+            type="button"
+            className={sidebarView === "folders" ? "active" : ""}
+            aria-label="Show folder list"
+            aria-pressed={sidebarView === "folders"}
+            title="Folders"
+            onClick={() => setSidebarView("folders")}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-10Z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={sidebarView === "jobs" ? "active" : ""}
+            aria-label="Show import job list"
+            aria-pressed={sidebarView === "jobs"}
+            title="Import jobs"
+            onClick={() => setSidebarView("jobs")}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 3h10v3h3v15H4V6h3V3Zm2 3h6V5H9v1Zm-2 4v2h10v-2H7Zm0 5v2h7v-2H7Z" />
+            </svg>
+            {jobs.some(isJobActive) && <span className="rail-indicator" />}
+          </button>
+        </nav>
+
+        <div className="sidebar-panel">
         <header className="brand">
           <p className="eyebrow">BSK MEDIA NEST</p>
-          <h1>Library</h1>
+          <h1>{sidebarView === "folders" ? "Library" : "Imports"}</h1>
           <p className="message">{notice}</p>
         </header>
 
-        <form className="import-action" onSubmit={scanFolder}>
-          <label htmlFor="folder-path">
-            {isDesktop ? "Selected media folder" : "Local folder path"}
-          </label>
-          <input
-            id="folder-path"
-            type="text"
-            value={folderPath}
-            onChange={(event) => setFolderPath(event.target.value)}
-            placeholder={isDesktop ? "Choose a folder below" : "/Users/name/Pictures"}
-            disabled={saving}
-            readOnly={isDesktop}
-          />
+        {sidebarView === "folders" && (
+          <>
+        <div className="import-action">
           <button
             className="picker"
             type="button"
@@ -293,12 +335,7 @@ export default function App() {
           >
             {saving ? "Scanning…" : "Choose folder"}
           </button>
-          {!isDesktop && (
-            <button className="path-import" type="submit" disabled={saving}>
-              Import typed path
-            </button>
-          )}
-        </form>
+        </div>
 
         <nav className="catalog" aria-label="Media folders">
           <h2>Folders</h2>
@@ -306,37 +343,51 @@ export default function App() {
             <p className="empty">No media folders yet.</p>
           ) : (
             folders.map((folder) => (
-              <button
-                className={`folder ${folder.id === selectedFolderId ? "selected" : ""}`}
-                key={folder.id}
-                onClick={() => setSelectedFolderId(folder.id)}
-                type="button"
-              >
-                <div className="folder-icon" aria-hidden="true">◆</div>
-                <div>
-                  <h2>{folder.name}</h2>
-                  <p>
-                    {folder.image_count}{" "}
-                    {folder.image_count === 1 ? "image" : "images"}
-                    {" · "}
-                    {folder.movie_count}{" "}
-                    {folder.movie_count === 1 ? "movie" : "movies"}
-                  </p>
-                  <p className="pending-rating">
-                    {folder.pending_rating_count === 0
-                      ? "All images rated"
-                      : `${folder.pending_rating_count} awaiting rating`}
-                  </p>
-                </div>
-              </button>
+              <div className="folder-row" key={folder.id}>
+                <button
+                  className={`folder ${folder.id === selectedFolderId ? "selected" : ""}`}
+                  onClick={() => setSelectedFolderId(folder.id)}
+                  type="button"
+                >
+                  <div className="folder-icon" aria-hidden="true">◆</div>
+                  <div>
+                    <h2>{folder.name}</h2>
+                    <p>
+                      {folder.image_count}{" "}
+                      {folder.image_count === 1 ? "image" : "images"}
+                      {" · "}
+                      {folder.movie_count}{" "}
+                      {folder.movie_count === 1 ? "movie" : "movies"}
+                    </p>
+                    <p className="pending-rating">
+                      {folder.pending_rating_count === 0
+                        ? "All media rated"
+                        : `${folder.pending_rating_count} awaiting rating`}
+                    </p>
+                  </div>
+                </button>
+                <button
+                  className="remove-folder"
+                  type="button"
+                  aria-label={`Remove ${folder.name} from catalog`}
+                  title="Remove from catalog"
+                  onClick={() => void removeFolder(folder)}
+                >
+                  ×
+                </button>
+              </div>
             ))
           )}
         </nav>
+          </>
+        )}
 
-        {jobs.length > 0 && (
+        {sidebarView === "jobs" && (
           <section className="jobs" aria-label="Import jobs">
             <h2>Recent imports</h2>
-            {jobs.slice(0, 5).map((job) => {
+            {jobs.length === 0 ? (
+              <p className="empty">No import jobs yet.</p>
+            ) : jobs.slice(0, 20).map((job) => {
               const progress =
                 job.total_files === 0
                   ? 0
@@ -363,6 +414,7 @@ export default function App() {
         <div className={`status ${connected ? "online" : ""}`}>
           <span aria-hidden="true" />
           {connected ? "Database connected" : "Waiting for database"}
+        </div>
         </div>
       </aside>
 

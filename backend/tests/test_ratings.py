@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.database import Base
-from app.main import list_folders, set_file_rating
+from app.main import list_folders, remove_folder, set_file_rating
 from app.models import FileRecord, ImageFolder, PhotoRating, UniqueFile
 from app.schemas import RatingUpdate
 
@@ -116,3 +116,51 @@ def test_folder_summary_counts_media_and_unrated_images() -> None:
         assert result.rating == 3
         assert result.md5 == movie.unique_md5
         assert updated_summary.pending_rating_count == 1
+
+
+def test_remove_folder_keeps_md5_rating_and_original_content_metadata() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        unique_file = UniqueFile(
+            md5="d" * 32,
+            size=10,
+            media_type="image/jpeg",
+            media_kind="image",
+            created_at=datetime.now(UTC),
+        )
+        folder = ImageFolder(
+            name="Removable",
+            normalized_name="removable",
+            source_path="/tmp/removable",
+            created_at=datetime.now(UTC),
+        )
+        db.add_all([unique_file, folder])
+        db.flush()
+        record = FileRecord(
+            folder_id=folder.id,
+            unique_md5=unique_file.md5,
+            relative_path="photo.jpg",
+            storage_path="/tmp/removable/photo.jpg",
+            media_type="image/jpeg",
+            media_kind="image",
+            size=10,
+            imported_at=datetime.now(UTC),
+        )
+        rating = PhotoRating(
+            md5=unique_file.md5,
+            rating=5,
+            updated_at=datetime.now(UTC),
+        )
+        db.add_all([record, rating])
+        db.commit()
+        folder_id = folder.id
+
+        response = remove_folder(folder_id, db)
+
+        assert response.status_code == 204
+        assert db.get(ImageFolder, folder_id) is None
+        assert db.query(FileRecord).count() == 0
+        assert db.get(UniqueFile, unique_file.md5) is not None
+        assert db.get(PhotoRating, unique_file.md5).rating == 5

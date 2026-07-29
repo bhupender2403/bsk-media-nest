@@ -35,14 +35,15 @@ stop:
 	@echo "Development services run in the foreground; press Ctrl+C in their terminal."
 
 db-clear:
-	@printf "Delete the local BSK Media Nest database? [y/N] "; \
+	@if lsof -tiTCP:8000 -sTCP:LISTEN >/dev/null 2>&1 || \
+		lsof -tiTCP:8765 -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "Stop make dev or make desktop with Ctrl+C before clearing the database."; \
+		exit 1; \
+	fi
+	@printf "Delete all BSK Media Nest catalog data? [y/N] "; \
 	read answer; \
 	case "$$answer" in \
-		y|Y|yes|YES) \
-			rm -f backend/.data/bsk-media-nest.db \
-				backend/.data/bsk-media-nest.db-shm \
-				backend/.data/bsk-media-nest.db-wal; \
-			echo "Database cleared." ;; \
+		y|Y|yes|YES) cd backend && .venv/bin/python -m app.clear_database ;; \
 		*) echo "Database clear cancelled." ;; \
 	esac
 
