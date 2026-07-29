@@ -1,19 +1,39 @@
-.PHONY: dev up down build logs test
+.PHONY: dev restart stop db-up db-down db-logs backend worker frontend test
 
-dev:
-	docker compose -f compose.yaml -f compose.dev.yaml up --build
+dev: db-up
+	@cleanup() { \
+		trap - INT TERM EXIT; \
+		kill "$$backend_pid" "$$worker_pid" "$$frontend_pid" 2>/dev/null || true; \
+		wait "$$backend_pid" "$$worker_pid" "$$frontend_pid" 2>/dev/null || true; \
+	}; \
+	trap cleanup INT TERM EXIT; \
+	(cd backend && exec .venv/bin/uvicorn app.main:app --reload --port 8000) & backend_pid=$$!; \
+	(cd backend && exec .venv/bin/python -m app.worker) & worker_pid=$$!; \
+	(cd frontend && exec npm run dev) & frontend_pid=$$!; \
+	wait
 
-up:
-	docker compose up --build -d
+restart: stop
+	@$(MAKE) dev
 
-down:
-	docker compose -f compose.yaml -f compose.dev.yaml down
+stop: db-down
 
-build:
-	docker compose build
+db-up:
+	docker compose up -d db
 
-logs:
-	docker compose logs -f
+db-down:
+	docker compose down
+
+db-logs:
+	docker compose logs -f db
+
+backend:
+	cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+
+worker:
+	cd backend && .venv/bin/python -m app.worker
+
+frontend:
+	cd frontend && npm run dev
 
 test:
-	docker compose run --rm --user root backend sh -c "pip install --no-cache-dir -r requirements-dev.txt && python -m pytest"
+	cd backend && .venv/bin/python -m pytest
