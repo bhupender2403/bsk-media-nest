@@ -456,22 +456,16 @@ export default function App() {
       </aside>
 
       <section className="media-browser">
-        <header className="browser-header">
-          <div>
-            <p className="section-label">CURRENT FOLDER</p>
-            <h2>{selectedFolder?.name ?? "Select a folder"}</h2>
-          </div>
-          {selectedFolder && (
-            <span className="file-count">
+        {selectedFolder && mediaFiles.length > 0 && (
+          <div className="media-filters" aria-label="Media filters">
+            <div className="filter-folder">
+              <strong>{selectedFolder.name}</strong>
+              <span className="file-count">
               {filteredMediaFiles.length}
               {hasActiveFilters && ` of ${mediaFiles.length}`}{" "}
               {filteredMediaFiles.length === 1 ? "item" : "items"}
-            </span>
-          )}
-        </header>
-
-        {selectedFolder && mediaFiles.length > 0 && (
-          <div className="media-filters" aria-label="Media filters">
+              </span>
+            </div>
             <div className="kind-filter" role="group" aria-label="Media type">
               {(
                 [
