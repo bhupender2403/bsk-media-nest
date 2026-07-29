@@ -1,10 +1,10 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.database import Base
-from app.main import set_file_rating
+from app.main import list_folders, set_file_rating
 from app.models import FileRecord, ImageFolder, PhotoRating, UniqueFile
 from app.schemas import RatingUpdate
 
@@ -47,3 +47,72 @@ def test_rating_is_stored_by_md5() -> None:
         assert result.rating == 4
         assert result.md5 == unique_file.md5
         assert db.get(PhotoRating, unique_file.md5).rating == 4
+
+
+def test_folder_summary_counts_media_and_unrated_images() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        folder = ImageFolder(
+            name="Mixed media",
+            normalized_name="mixed media",
+            source_path="/tmp/mixed-media",
+            created_at=datetime.now(UTC),
+        )
+        files = [
+            UniqueFile(
+                md5=character * 32,
+                size=10,
+                media_type=media_type,
+                media_kind=media_kind,
+                created_at=datetime.now(UTC),
+            )
+            for character, media_type, media_kind in [
+                ("a", "image/jpeg", "image"),
+                ("b", "image/png", "image"),
+                ("c", "video/mp4", "video"),
+            ]
+        ]
+        db.add_all([folder, *files])
+        db.flush()
+        db.add_all(
+            [
+                FileRecord(
+                    folder_id=folder.id,
+                    unique_md5=file.md5,
+                    relative_path=f"{index}.{file.media_type.split('/')[1]}",
+                    storage_path=f"/tmp/mixed-media/{index}",
+                    media_type=file.media_type,
+                    media_kind=file.media_kind,
+                    size=file.size,
+                    imported_at=datetime.now(UTC),
+                )
+                for index, file in enumerate(files)
+            ]
+        )
+        db.add(
+            PhotoRating(
+                md5=files[0].md5,
+                rating=5,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        db.commit()
+
+        summaries = list_folders(db)
+
+        assert len(summaries) == 1
+        assert summaries[0].image_count == 2
+        assert summaries[0].movie_count == 1
+        assert summaries[0].pending_rating_count == 2
+
+        movie = db.scalar(
+            select(FileRecord).where(FileRecord.media_kind == "video")
+        )
+        result = set_file_rating(movie.id, RatingUpdate(rating=3), db)
+        updated_summary = list_folders(db)[0]
+
+        assert result.rating == 3
+        assert result.md5 == movie.unique_md5
+        assert updated_summary.pending_rating_count == 1

@@ -19,6 +19,8 @@ class ImageFolderSummary(BaseModel):
     id: int
     name: str
     image_count: int
+    movie_count: int
+    pending_rating_count: int
     created_at: datetime
 
 

@@ -111,8 +111,9 @@ The schema separates a file's location from its content:
 - `import_jobs` and `import_job_items` track asynchronous progress.
 
 Identical files in two locations produce two `file_records` rows referencing
-one `unique_files` row. Photo ratings are stored in `photo_ratings` by MD5, so
-every location containing the same photo shows the same 1–5 star rating.
+one `unique_files` row. Image and movie ratings are stored in `photo_ratings`
+by MD5, so every location containing the same media shows the same 1–5 star
+rating.
 
 ## Useful commands
 

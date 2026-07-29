@@ -10,7 +10,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -155,11 +155,18 @@ def select_folder() -> FolderSelectionResult:
     return FolderSelectionResult(path=select_folder_path())
 
 
-def folder_summary(folder: ImageFolder, image_count: int) -> ImageFolderSummary:
+def folder_summary(
+    folder: ImageFolder,
+    image_count: int,
+    movie_count: int = 0,
+    pending_rating_count: int = 0,
+) -> ImageFolderSummary:
     return ImageFolderSummary(
         id=folder.id,
         name=folder.name,
         image_count=image_count,
+        movie_count=movie_count,
+        pending_rating_count=pending_rating_count,
         created_at=folder.created_at,
     )
 
@@ -167,12 +174,42 @@ def folder_summary(folder: ImageFolder, image_count: int) -> ImageFolderSummary:
 @app.get("/api/folders", response_model=list[ImageFolderSummary])
 def list_folders(db: Session = Depends(get_db)) -> list[ImageFolderSummary]:
     rows = db.execute(
-        select(ImageFolder, func.count(FileRecord.id))
-        .outerjoin(FileRecord)
+        select(
+            ImageFolder,
+            func.sum(
+                case((FileRecord.media_kind == "image", 1), else_=0)
+            ).label("image_count"),
+            func.sum(
+                case((FileRecord.media_kind == "video", 1), else_=0)
+            ).label("movie_count"),
+            func.sum(
+                case(
+                    (
+                        (
+                            (FileRecord.media_kind == "image")
+                            | (FileRecord.media_kind == "video")
+                        )
+                        & (PhotoRating.md5.is_(None)),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("pending_rating_count"),
+        )
+        .outerjoin(FileRecord, FileRecord.folder_id == ImageFolder.id)
+        .outerjoin(PhotoRating, PhotoRating.md5 == FileRecord.unique_md5)
         .group_by(ImageFolder.id)
         .order_by(ImageFolder.created_at.desc())
     ).all()
-    return [folder_summary(folder, image_count) for folder, image_count in rows]
+    return [
+        folder_summary(
+            folder,
+            int(image_count or 0),
+            int(movie_count or 0),
+            int(pending_rating_count or 0),
+        )
+        for folder, image_count, movie_count, pending_rating_count in rows
+    ]
 
 
 @app.get(
@@ -215,8 +252,11 @@ def set_file_rating(
     record = db.get(FileRecord, file_id)
     if record is None:
         raise HTTPException(status_code=404, detail="File not found.")
-    if record.media_kind != "image":
-        raise HTTPException(status_code=400, detail="Only images can be rated.")
+    if record.media_kind not in {"image", "video"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only images and movies can be rated.",
+        )
 
     rating = db.get(PhotoRating, record.unique_md5)
     if rating is None:

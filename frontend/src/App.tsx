@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 declare global {
   interface Window {
@@ -17,6 +17,8 @@ type ImageFolder = {
   id: number;
   name: string;
   image_count: number;
+  movie_count: number;
+  pending_rating_count: number;
   created_at: string;
 };
 
@@ -44,6 +46,9 @@ type MediaFile = {
   content_url: string;
 };
 
+type MediaKindFilter = "all" | "image" | "video";
+type RatingFilter = "all" | "unrated" | "1" | "2" | "3" | "4" | "5";
+
 export default function App() {
   const [folders, setFolders] = useState<ImageFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
@@ -56,6 +61,9 @@ export default function App() {
   const [folderPath, setFolderPath] = useState("");
   const [savingRatingMd5, setSavingRatingMd5] = useState<string | null>(null);
   const [mediaRevision, setMediaRevision] = useState(0);
+  const [mediaKindFilter, setMediaKindFilter] =
+    useState<MediaKindFilter>("all");
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
 
   const loadFolders = useCallback(async () => {
     try {
@@ -209,7 +217,24 @@ export default function App() {
     (folder) => folder.id === selectedFolderId,
   );
 
-  const ratePhoto = async (file: MediaFile, rating: number) => {
+  const filteredMediaFiles = useMemo(
+    () =>
+      mediaFiles.filter((file) => {
+        const matchesKind =
+          mediaKindFilter === "all" || file.media_kind === mediaKindFilter;
+        const matchesRating =
+          ratingFilter === "all" ||
+          (ratingFilter === "unrated"
+            ? file.rating === null
+            : file.rating === Number(ratingFilter));
+        return matchesKind && matchesRating;
+      }),
+    [mediaFiles, mediaKindFilter, ratingFilter],
+  );
+  const hasActiveFilters =
+    mediaKindFilter !== "all" || ratingFilter !== "all";
+
+  const rateMedia = async (file: MediaFile, rating: number) => {
     setSavingRatingMd5(file.md5);
     try {
       const response = await fetch(apiUrl(`/api/files/${file.id}/rating`), {
@@ -224,8 +249,9 @@ export default function App() {
           item.md5 === saved.md5 ? { ...item, rating: saved.rating } : item,
         ),
       );
+      await loadFolders();
     } catch {
-      setNotice("Could not save the photo rating.");
+      setNotice("Could not save the media rating.");
     } finally {
       setSavingRatingMd5(null);
     }
@@ -290,7 +316,16 @@ export default function App() {
                 <div>
                   <h2>{folder.name}</h2>
                   <p>
-                    {folder.image_count} {folder.image_count === 1 ? "file" : "files"}
+                    {folder.image_count}{" "}
+                    {folder.image_count === 1 ? "image" : "images"}
+                    {" · "}
+                    {folder.movie_count}{" "}
+                    {folder.movie_count === 1 ? "movie" : "movies"}
+                  </p>
+                  <p className="pending-rating">
+                    {folder.pending_rating_count === 0
+                      ? "All images rated"
+                      : `${folder.pending_rating_count} awaiting rating`}
                   </p>
                 </div>
               </button>
@@ -339,10 +374,65 @@ export default function App() {
           </div>
           {selectedFolder && (
             <span className="file-count">
-              {mediaFiles.length} {mediaFiles.length === 1 ? "item" : "items"}
+              {filteredMediaFiles.length}
+              {hasActiveFilters && ` of ${mediaFiles.length}`}{" "}
+              {filteredMediaFiles.length === 1 ? "item" : "items"}
             </span>
           )}
         </header>
+
+        {selectedFolder && mediaFiles.length > 0 && (
+          <div className="media-filters" aria-label="Media filters">
+            <div className="kind-filter" role="group" aria-label="Media type">
+              {(
+                [
+                  ["all", "All"],
+                  ["image", "Images"],
+                  ["video", "Movies"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  type="button"
+                  key={value}
+                  className={mediaKindFilter === value ? "active" : ""}
+                  aria-pressed={mediaKindFilter === value}
+                  onClick={() => setMediaKindFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="rating-filter">
+              <span>Rating</span>
+              <select
+                value={ratingFilter}
+                onChange={(event) =>
+                  setRatingFilter(event.target.value as RatingFilter)
+                }
+              >
+                <option value="all">Any rating</option>
+                <option value="5">5 stars</option>
+                <option value="4">4 stars</option>
+                <option value="3">3 stars</option>
+                <option value="2">2 stars</option>
+                <option value="1">1 star</option>
+                <option value="unrated">Unrated</option>
+              </select>
+            </label>
+            {hasActiveFilters && (
+              <button
+                className="clear-filters"
+                type="button"
+                onClick={() => {
+                  setMediaKindFilter("all");
+                  setRatingFilter("all");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
 
         {loadingMedia ? (
           <div className="gallery-empty">Loading media…</div>
@@ -356,12 +446,28 @@ export default function App() {
                 : "Choose a folder from the left pane."}
             </p>
           </div>
+        ) : filteredMediaFiles.length === 0 ? (
+          <div className="gallery-empty">
+            <div className="empty-icon" aria-hidden="true">◇</div>
+            <h3>No matching media</h3>
+            <p>Try another media type or star rating.</p>
+            <button
+              className="empty-clear"
+              type="button"
+              onClick={() => {
+                setMediaKindFilter("all");
+                setRatingFilter("all");
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
         ) : (
           <div className="media-grid">
-            {mediaFiles.map((file) => (
+            {filteredMediaFiles.map((file) => (
               <article className="media-card" key={file.id}>
                 <div className="preview">
-                  {file.media_kind === "image" && (
+                  {["image", "video"].includes(file.media_kind) && (
                     <img
                       src={apiUrl(file.content_url)}
                       alt={fileName(file.relative_path)}
@@ -407,7 +513,7 @@ export default function App() {
                           aria-label={`Rate ${fileName(file.relative_path)} ${star} star${star === 1 ? "" : "s"}`}
                           aria-pressed={star === file.rating}
                           disabled={savingRatingMd5 === file.md5}
-                          onClick={() => void ratePhoto(file, star)}
+                          onClick={() => void rateMedia(file, star)}
                         >
                           {star <= (file.rating ?? 0) ? "★" : "☆"}
                         </button>
