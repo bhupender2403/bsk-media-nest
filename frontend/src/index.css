@@ -706,13 +706,26 @@ input {
 }
 
 .slide-thumbnails {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  display: flex;
   gap: 0.55rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.45rem;
+  scroll-snap-type: x proximity;
+  scrollbar-color: #3b4655 #111720;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.slide-thumbnails.dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
 }
 
 .slide-thumbnails button {
   position: relative;
+  flex: 0 0 82px;
   aspect-ratio: 1;
   overflow: hidden;
   padding: 0;
@@ -721,6 +734,11 @@ input {
   background: #090d12;
   cursor: pointer;
   opacity: 0.62;
+  scroll-snap-align: start;
+}
+
+.slide-thumbnails.dragging button {
+  cursor: grabbing;
 }
 
 .slide-thumbnails button:hover {

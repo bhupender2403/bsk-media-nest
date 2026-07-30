@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 declare global {
   interface Window {
@@ -69,6 +76,44 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>("folders");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("large");
   const [selectedSlideId, setSelectedSlideId] = useState<number | null>(null);
+  const [draggingThumbnails, setDraggingThumbnails] = useState(false);
+  const thumbnailDrag = useRef({
+    pointerId: -1,
+    startX: 0,
+    scrollLeft: 0,
+    moved: false,
+  });
+
+  const startThumbnailDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    thumbnailDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: event.currentTarget.scrollLeft,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggingThumbnails(true);
+  };
+
+  const moveThumbnailDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (thumbnailDrag.current.pointerId !== event.pointerId) return;
+    const distance = event.clientX - thumbnailDrag.current.startX;
+    if (Math.abs(distance) > 3) {
+      thumbnailDrag.current.moved = true;
+    }
+    event.currentTarget.scrollLeft =
+      thumbnailDrag.current.scrollLeft - distance;
+  };
+
+  const endThumbnailDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (thumbnailDrag.current.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    thumbnailDrag.current.pointerId = -1;
+    setDraggingThumbnails(false);
+  };
 
   const loadFolders = useCallback(async () => {
     try {
@@ -704,7 +749,14 @@ export default function App() {
                   {slideshowFiles.length}
                 </span>
               </div>
-              <div className="slide-thumbnails" aria-label="Slideshow images">
+              <div
+                className={`slide-thumbnails ${draggingThumbnails ? "dragging" : ""}`}
+                aria-label="Slideshow images"
+                onPointerDown={startThumbnailDrag}
+                onPointerMove={moveThumbnailDrag}
+                onPointerUp={endThumbnailDrag}
+                onPointerCancel={endThumbnailDrag}
+              >
                 {slideshowFiles.map((file) => (
                   <button
                     type="button"
@@ -716,12 +768,19 @@ export default function App() {
                         : `rated ${file.rating} stars`
                     }`}
                     aria-pressed={file.id === selectedSlide.id}
-                    onClick={() => setSelectedSlideId(file.id)}
+                    onClick={() => {
+                      if (thumbnailDrag.current.moved) {
+                        thumbnailDrag.current.moved = false;
+                        return;
+                      }
+                      setSelectedSlideId(file.id);
+                    }}
                   >
                     <img
                       src={apiUrl(file.thumbnail_url ?? file.content_url)}
                       alt=""
                       loading="lazy"
+                      draggable={false}
                     />
                     <span className="thumbnail-rating" aria-hidden="true">
                       {file.rating === null ? "☆" : `★ ${file.rating}`}
