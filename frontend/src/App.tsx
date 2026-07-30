@@ -76,6 +76,14 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>("folders");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("large");
   const [selectedSlideId, setSelectedSlideId] = useState<number | null>(null);
+  const [selectedImageIds, setSelectedImageIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [selectionViewerOpen, setSelectionViewerOpen] = useState(false);
+  const [selectionViewerImageId, setSelectionViewerImageId] = useState<
+    number | null
+  >(null);
+  const [selectionZoom, setSelectionZoom] = useState(1);
   const [draggingThumbnails, setDraggingThumbnails] = useState(false);
   const thumbnailDrag = useRef({
     pointerId: -1,
@@ -92,15 +100,15 @@ export default function App() {
       scrollLeft: event.currentTarget.scrollLeft,
       moved: false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDraggingThumbnails(true);
   };
 
   const moveThumbnailDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (thumbnailDrag.current.pointerId !== event.pointerId) return;
     const distance = event.clientX - thumbnailDrag.current.startX;
-    if (Math.abs(distance) > 3) {
+    if (Math.abs(distance) > 3 && !thumbnailDrag.current.moved) {
       thumbnailDrag.current.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setDraggingThumbnails(true);
     }
     event.currentTarget.scrollLeft =
       thumbnailDrag.current.scrollLeft - distance;
@@ -313,6 +321,83 @@ export default function App() {
     slideshowFiles.find((file) => file.id === selectedSlideId) ??
     slideshowFiles[0] ??
     null;
+  const selectedImages = useMemo(
+    () =>
+      mediaFiles.filter(
+        (file) =>
+          file.media_kind === "image" && selectedImageIds.has(file.id),
+      ),
+    [mediaFiles, selectedImageIds],
+  );
+  const selectionViewerImage =
+    selectedImages.find((file) => file.id === selectionViewerImageId) ??
+    selectedImages[0] ??
+    null;
+  const selectionViewerIndex =
+    selectionViewerImage === null
+      ? -1
+      : selectedImages.findIndex(
+          (file) => file.id === selectionViewerImage.id,
+        );
+
+  const clearImageSelection = useCallback(() => {
+    setSelectedImageIds(new Set());
+    setSelectionViewerImageId(null);
+  }, []);
+
+  const closeSelectionViewer = useCallback(() => {
+    setSelectionViewerOpen(false);
+    setSelectionZoom(1);
+    clearImageSelection();
+  }, [clearImageSelection]);
+
+  useEffect(() => {
+    clearImageSelection();
+    setSelectionViewerOpen(false);
+    setSelectionZoom(1);
+  }, [selectedFolderId, clearImageSelection]);
+
+  useEffect(() => {
+    if (!selectionViewerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeSelectionViewer();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectionViewerOpen, closeSelectionViewer]);
+
+  const toggleImageSelection = (file: MediaFile) => {
+    setSelectedImageIds((current) => {
+      const next = new Set(current);
+      if (next.has(file.id)) {
+        next.delete(file.id);
+      } else {
+        next.add(file.id);
+      }
+      return next;
+    });
+  };
+
+  const openSelectionViewer = () => {
+    if (selectedImages.length === 0) return;
+    setSelectionViewerImageId(selectedImages[0].id);
+    setSelectionZoom(1);
+    setSelectionViewerOpen(true);
+  };
+
+  const moveSelectionViewer = (direction: -1 | 1) => {
+    if (selectedImages.length < 2 || selectionViewerIndex < 0) return;
+    const nextIndex =
+      (selectionViewerIndex + direction + selectedImages.length) %
+      selectedImages.length;
+    setSelectionViewerImageId(selectedImages[nextIndex].id);
+    setSelectionZoom(1);
+  };
 
   useEffect(() => {
     if (displayMode !== "slideshow") return;
@@ -560,6 +645,17 @@ export default function App() {
                 Clear filters
               </button>
             )}
+            {selectedImages.length > 0 && (
+              <div className="selection-actions" aria-label="Photo selection">
+                <span>{selectedImages.length} selected</span>
+                <button type="button" onClick={openSelectionViewer}>
+                  Open selected
+                </button>
+                <button type="button" onClick={clearImageSelection}>
+                  Clear selection
+                </button>
+              </div>
+            )}
             <div
               className="display-modes"
               role="group"
@@ -643,7 +739,13 @@ export default function App() {
           ) : (
             <section className="slideshow" aria-label="Image slideshow">
               <div className="slide-viewer">
-                <div className="slide-stage">
+                <div
+                  className={`slide-stage ${
+                    selectedImageIds.has(selectedSlide.id)
+                      ? "photo-selected"
+                      : ""
+                  }`}
+                >
                   <button
                     className="slide-navigation previous"
                     type="button"
@@ -656,7 +758,16 @@ export default function App() {
                   <img
                     src={apiUrl(selectedSlide.content_url)}
                     alt={fileName(selectedSlide.relative_path)}
+                    title="Shift-click to select this photo"
+                    onClick={(event) => {
+                      if (event.shiftKey) {
+                        toggleImageSelection(selectedSlide);
+                      }
+                    }}
                   />
+                  {selectedImageIds.has(selectedSlide.id) && (
+                    <span className="selection-check" aria-hidden="true">✓</span>
+                  )}
                   <button
                     className="slide-navigation next"
                     type="button"
@@ -761,16 +872,32 @@ export default function App() {
                   <button
                     type="button"
                     key={file.id}
-                    className={file.id === selectedSlide.id ? "active" : ""}
+                    className={[
+                      file.id === selectedSlide.id ? "active" : "",
+                      selectedImageIds.has(file.id) ? "photo-selected" : "",
+                    ].join(" ")}
                     aria-label={`Show ${fileName(file.relative_path)}, ${
                       file.rating === null
                         ? "not rated"
                         : `rated ${file.rating} stars`
+                    }, ${
+                      selectedImageIds.has(file.id)
+                        ? "selected"
+                        : "not selected"
                     }`}
                     aria-pressed={file.id === selectedSlide.id}
-                    onClick={() => {
+                    title={
+                      selectedImageIds.has(file.id)
+                        ? "Shift-click to remove from selection"
+                        : "Shift-click to select this photo"
+                    }
+                    onClick={(event) => {
                       if (thumbnailDrag.current.moved) {
                         thumbnailDrag.current.moved = false;
+                        return;
+                      }
+                      if (event.shiftKey) {
+                        toggleImageSelection(file);
                         return;
                       }
                       setSelectedSlideId(file.id);
@@ -785,6 +912,9 @@ export default function App() {
                     <span className="thumbnail-rating" aria-hidden="true">
                       {file.rating === null ? "☆" : `★ ${file.rating}`}
                     </span>
+                    {selectedImageIds.has(file.id) && (
+                      <span className="selection-check" aria-hidden="true">✓</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -793,8 +923,27 @@ export default function App() {
         ) : (
           <div className={`media-grid ${displayMode}`}>
             {filteredMediaFiles.map((file) => (
-              <article className="media-card" key={file.id}>
-                <div className="preview">
+              <article
+                className={`media-card ${
+                  selectedImageIds.has(file.id) ? "photo-selected" : ""
+                }`}
+                key={file.id}
+              >
+                <div
+                  className={`preview ${
+                    file.media_kind === "image" ? "selectable-photo" : ""
+                  }`}
+                  title={
+                    file.media_kind === "image"
+                      ? "Shift-click to select this photo"
+                      : undefined
+                  }
+                  onClick={(event) => {
+                    if (file.media_kind === "image" && event.shiftKey) {
+                      toggleImageSelection(file);
+                    }
+                  }}
+                >
                   {file.media_kind === "image" && (
                     <img
                       src={apiUrl(file.thumbnail_url ?? file.content_url)}
@@ -817,6 +966,9 @@ export default function App() {
                   )}
                   {file.media_kind === "other" && (
                     <div className="other-preview" aria-hidden="true">FILE</div>
+                  )}
+                  {selectedImageIds.has(file.id) && (
+                    <span className="selection-check" aria-hidden="true">✓</span>
                   )}
                 </div>
                 <div className="media-meta">
@@ -851,6 +1003,161 @@ export default function App() {
                 </div>
               </article>
             ))}
+          </div>
+        )}
+        {selectionViewerOpen && selectionViewerImage && (
+          <div
+            className="selection-modal-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeSelectionViewer();
+              }
+            }}
+          >
+            <section
+              className="selection-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Selected photo viewer"
+            >
+              <header className="selection-modal-header">
+                <div>
+                  <strong>
+                    {fileName(selectionViewerImage.relative_path)}
+                  </strong>
+                  <span>
+                    {selectionViewerIndex + 1} of {selectedImages.length} selected
+                  </span>
+                </div>
+                <div className="zoom-controls" aria-label="Zoom controls">
+                  <button
+                    type="button"
+                    aria-label="Zoom out"
+                    disabled={selectionZoom <= 0.5}
+                    onClick={() =>
+                      setSelectionZoom((current) =>
+                        Math.max(0.5, current - 0.25),
+                      )
+                    }
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Reset zoom"
+                    onClick={() => setSelectionZoom(1)}
+                  >
+                    {Math.round(selectionZoom * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Zoom in"
+                    disabled={selectionZoom >= 4}
+                    onClick={() =>
+                      setSelectionZoom((current) =>
+                        Math.min(4, current + 0.25),
+                      )
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  className="selection-modal-close"
+                  type="button"
+                  aria-label="Close selected photo viewer"
+                  onClick={closeSelectionViewer}
+                >
+                  ×
+                </button>
+              </header>
+              <div className="selection-modal-viewer">
+                <button
+                  className="selection-modal-navigation previous"
+                  type="button"
+                  aria-label="Previous selected photo"
+                  disabled={selectedImages.length < 2}
+                  onClick={() => moveSelectionViewer(-1)}
+                >
+                  ‹
+                </button>
+                <div className="selection-modal-image">
+                  <img
+                    src={apiUrl(selectionViewerImage.content_url)}
+                    alt={fileName(selectionViewerImage.relative_path)}
+                    style={{ transform: `scale(${selectionZoom})` }}
+                  />
+                </div>
+                <button
+                  className="selection-modal-navigation next"
+                  type="button"
+                  aria-label="Next selected photo"
+                  disabled={selectedImages.length < 2}
+                  onClick={() => moveSelectionViewer(1)}
+                >
+                  ›
+                </button>
+              </div>
+              <footer className="selection-modal-footer">
+                <div
+                  className="rating modal-rating"
+                  aria-label={
+                    selectionViewerImage.rating === null
+                      ? "Not rated"
+                      : `${selectionViewerImage.rating} out of 5 stars`
+                  }
+                >
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      className={
+                        star <= (selectionViewerImage.rating ?? 0)
+                          ? "filled"
+                          : ""
+                      }
+                      type="button"
+                      key={star}
+                      aria-label={`Rate ${fileName(selectionViewerImage.relative_path)} ${star} star${star === 1 ? "" : "s"}`}
+                      aria-pressed={star === selectionViewerImage.rating}
+                      disabled={
+                        savingRatingMd5 === selectionViewerImage.md5
+                      }
+                      onClick={() =>
+                        void rateMedia(selectionViewerImage, star)
+                      }
+                    >
+                      {star <= (selectionViewerImage.rating ?? 0) ? "★" : "☆"}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="selection-modal-thumbnails"
+                  aria-label="Selected photos"
+                >
+                  {selectedImages.map((file) => (
+                    <button
+                      type="button"
+                      key={file.id}
+                      className={
+                        file.id === selectionViewerImage.id ? "active" : ""
+                      }
+                      aria-label={`View ${fileName(file.relative_path)}`}
+                      aria-pressed={file.id === selectionViewerImage.id}
+                      onClick={() => {
+                        setSelectionViewerImageId(file.id);
+                        setSelectionZoom(1);
+                      }}
+                    >
+                      <img
+                        src={apiUrl(file.thumbnail_url ?? file.content_url)}
+                        alt=""
+                        draggable={false}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </footer>
+            </section>
           </div>
         )}
       </section>
