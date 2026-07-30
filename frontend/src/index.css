@@ -1065,7 +1065,9 @@ input {
   min-height: 0;
   display: block;
   object-fit: contain;
+  cursor: zoom-in;
   transition: transform 120ms ease;
+  user-select: none;
 }
 
 .selection-modal-navigation {

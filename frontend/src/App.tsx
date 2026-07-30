@@ -84,6 +84,7 @@ export default function App() {
     number | null
   >(null);
   const [selectionZoom, setSelectionZoom] = useState(1);
+  const [selectionZoomOrigin, setSelectionZoomOrigin] = useState("50% 50%");
   const [draggingThumbnails, setDraggingThumbnails] = useState(false);
   const thumbnailDrag = useRef({
     pointerId: -1,
@@ -348,6 +349,7 @@ export default function App() {
   const closeSelectionViewer = useCallback(() => {
     setSelectionViewerOpen(false);
     setSelectionZoom(1);
+    setSelectionZoomOrigin("50% 50%");
     clearImageSelection();
   }, [clearImageSelection]);
 
@@ -355,6 +357,7 @@ export default function App() {
     clearImageSelection();
     setSelectionViewerOpen(false);
     setSelectionZoom(1);
+    setSelectionZoomOrigin("50% 50%");
   }, [selectedFolderId, clearImageSelection]);
 
   useEffect(() => {
@@ -387,6 +390,7 @@ export default function App() {
     if (selectedImages.length === 0) return;
     setSelectionViewerImageId(selectedImages[0].id);
     setSelectionZoom(1);
+    setSelectionZoomOrigin("50% 50%");
     setSelectionViewerOpen(true);
   };
 
@@ -397,6 +401,7 @@ export default function App() {
       selectedImages.length;
     setSelectionViewerImageId(selectedImages[nextIndex].id);
     setSelectionZoom(1);
+    setSelectionZoomOrigin("50% 50%");
   };
 
   useEffect(() => {
@@ -1046,7 +1051,10 @@ export default function App() {
                   <button
                     type="button"
                     aria-label="Reset zoom"
-                    onClick={() => setSelectionZoom(1)}
+                    onClick={() => {
+                      setSelectionZoom(1);
+                      setSelectionZoomOrigin("50% 50%");
+                    }}
                   >
                     {Math.round(selectionZoom * 100)}%
                   </button>
@@ -1086,7 +1094,29 @@ export default function App() {
                   <img
                     src={apiUrl(selectionViewerImage.content_url)}
                     alt={fileName(selectionViewerImage.relative_path)}
-                    style={{ transform: `scale(${selectionZoom})` }}
+                    title="Click to zoom in; double-click to reset"
+                    style={{
+                      transform: `scale(${selectionZoom})`,
+                      transformOrigin: selectionZoomOrigin,
+                    }}
+                    onClick={(event) => {
+                      const bounds =
+                        event.currentTarget.getBoundingClientRect();
+                      const x =
+                        ((event.clientX - bounds.left) / bounds.width) * 100;
+                      const y =
+                        ((event.clientY - bounds.top) / bounds.height) * 100;
+                      setSelectionZoomOrigin(
+                        `${Math.max(0, Math.min(100, x))}% ${Math.max(0, Math.min(100, y))}%`,
+                      );
+                      setSelectionZoom((current) =>
+                        Math.min(4, current + 0.5),
+                      );
+                    }}
+                    onDoubleClick={() => {
+                      setSelectionZoom(1);
+                      setSelectionZoomOrigin("50% 50%");
+                    }}
                   />
                 </div>
                 <button
@@ -1146,6 +1176,7 @@ export default function App() {
                       onClick={() => {
                         setSelectionViewerImageId(file.id);
                         setSelectionZoom(1);
+                        setSelectionZoomOrigin("50% 50%");
                       }}
                     >
                       <img
