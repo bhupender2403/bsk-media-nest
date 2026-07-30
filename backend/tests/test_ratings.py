@@ -4,7 +4,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.database import Base
-from app.main import list_folders, remove_folder, set_file_rating
+from app.main import (
+    list_folder_files,
+    list_folders,
+    remove_folder,
+    set_file_rating,
+)
 from app.models import FileRecord, ImageFolder, PhotoRating, UniqueFile
 from app.schemas import RatingUpdate
 
@@ -43,10 +48,17 @@ def test_rating_is_stored_by_md5() -> None:
         db.commit()
 
         result = set_file_rating(record.id, RatingUpdate(rating=4), db)
+        summary = list_folder_files(folder.id, db)[0]
 
         assert result.rating == 4
         assert result.md5 == unique_file.md5
         assert db.get(PhotoRating, unique_file.md5).rating == 4
+        assert summary.content_url == (
+            f"/api/files/{record.id}/content?v={unique_file.md5}"
+        )
+        assert summary.thumbnail_url == (
+            f"/api/files/{record.id}/thumbnail?v={unique_file.md5}"
+        )
 
 
 def test_folder_summary_counts_media_and_unrated_images() -> None:

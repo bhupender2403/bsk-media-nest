@@ -58,13 +58,19 @@ make desktop
 
 The desktop window has a native **Choose folder** button. Selecting a folder
 immediately creates an import job. FastAPI's integrated background worker
-indexes its image, video, and audio files without copying them.
+indexes its image, video, and audio files without copying them. It also creates
+small JPEG previews for images so gallery and thumbnail-strip views load
+quickly.
 
 During desktop development, SQLite is stored at:
 
 ```text
 backend/.data/bsk-media-nest.db
 ```
+
+Generated previews are stored under `backend/.data/thumbnails`. Their paths use
+the image MD5 in a Git-style layout, for example an MD5 beginning with `ab`
+is stored as `thumbnails/ab/<remaining-md5>.jpg`.
 
 Packaged applications store it in the operating system's application-data
 directory.
@@ -79,6 +85,15 @@ make dev
 
 Open <http://localhost:5173>. API documentation is available at
 <http://localhost:8000/docs>.
+
+To keep the database and thumbnail cache somewhere else, configure the backend
+data root when starting the services:
+
+```bash
+make dev BSK_DATA_DIR=/absolute/path/to/bsk-media-data
+```
+
+The backend creates the data root and its `thumbnails` directory automatically.
 
 The browser cannot reveal an absolute folder path itself. For local
 development, the **Choose folder** button asks FastAPI to open the operating
@@ -116,7 +131,8 @@ The schema separates a file's location from its content:
 Identical files in two locations produce two `file_records` rows referencing
 one `unique_files` row. Image and movie ratings are stored in `photo_ratings`
 by MD5, so every location containing the same media shows the same 1–5 star
-rating.
+rating. Image grids and the slideshow's lower strip use generated thumbnails;
+the selected slideshow image uses the original full-resolution file.
 
 ## Useful commands
 

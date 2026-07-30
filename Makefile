@@ -1,5 +1,7 @@
 .PHONY: dev desktop desktop-services desktop-build-assets restart stop db-clear backend frontend test
 
+BSK_DATA_DIR ?= $(CURDIR)/backend/.data
+
 dev:
 	@cleanup() { \
 		trap - INT TERM EXIT; \
@@ -7,7 +9,7 @@ dev:
 		wait "$$backend_pid" "$$frontend_pid" 2>/dev/null || true; \
 	}; \
 	trap cleanup INT TERM EXIT; \
-	(cd backend && exec .venv/bin/uvicorn app.main:app --reload --port 8000) & backend_pid=$$!; \
+	(cd backend && BSK_DATA_DIR="$(BSK_DATA_DIR)" exec .venv/bin/uvicorn app.main:app --reload --port 8000) & backend_pid=$$!; \
 	(cd frontend && exec npm run dev) & frontend_pid=$$!; \
 	wait
 
@@ -21,7 +23,7 @@ desktop-services:
 		wait "$$backend_pid" "$$frontend_pid" 2>/dev/null || true; \
 	}; \
 	trap cleanup INT TERM EXIT; \
-	(cd backend && exec .venv/bin/uvicorn app.main:app --reload --port 8765) & backend_pid=$$!; \
+	(cd backend && BSK_DATA_DIR="$(BSK_DATA_DIR)" exec .venv/bin/uvicorn app.main:app --reload --port 8765) & backend_pid=$$!; \
 	(cd frontend && exec npm run dev) & frontend_pid=$$!; \
 	wait
 
@@ -43,12 +45,12 @@ db-clear:
 	@printf "Delete all BSK Media Nest catalog data? [y/N] "; \
 	read answer; \
 	case "$$answer" in \
-		y|Y|yes|YES) cd backend && .venv/bin/python -m app.clear_database ;; \
+		y|Y|yes|YES) cd backend && BSK_DATA_DIR="$(BSK_DATA_DIR)" .venv/bin/python -m app.clear_database ;; \
 		*) echo "Database clear cancelled." ;; \
 	esac
 
 backend:
-	cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+	cd backend && BSK_DATA_DIR="$(BSK_DATA_DIR)" .venv/bin/uvicorn app.main:app --reload --port 8000
 
 frontend:
 	cd frontend && npm run dev

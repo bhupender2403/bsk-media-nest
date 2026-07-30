@@ -44,6 +44,7 @@ type MediaFile = {
   md5: string;
   rating: number | null;
   content_url: string;
+  thumbnail_url: string | null;
 };
 
 type MediaKindFilter = "all" | "image" | "video";
@@ -718,7 +719,7 @@ export default function App() {
                     onClick={() => setSelectedSlideId(file.id)}
                   >
                     <img
-                      src={apiUrl(file.content_url)}
+                      src={apiUrl(file.thumbnail_url ?? file.content_url)}
                       alt=""
                       loading="lazy"
                     />
@@ -737,7 +738,7 @@ export default function App() {
                 <div className="preview">
                   {file.media_kind === "image" && (
                     <img
-                      src={apiUrl(file.content_url)}
+                      src={apiUrl(file.thumbnail_url ?? file.content_url)}
                       alt={fileName(file.relative_path)}
                       loading="lazy"
                     />

@@ -61,6 +61,7 @@ class FileRecordSummary(BaseModel):
     md5: str
     rating: int | None
     content_url: str
+    thumbnail_url: str | None
 
 
 class RatingUpdate(BaseModel):

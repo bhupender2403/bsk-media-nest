@@ -4,12 +4,14 @@ import mimetypes
 from pathlib import Path
 from threading import Event
 
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from app.database import SessionLocal, initialize_schema
+from app.database import SessionLocal, THUMBNAIL_DIR, initialize_schema
 from app.models import FileRecord, ImportJob, ImportJobItem, UniqueFile
 
 POLL_INTERVAL_SECONDS = 2
+THUMBNAIL_MAX_SIZE = (480, 480)
 
 
 def file_md5(path: Path) -> str:
@@ -23,6 +25,38 @@ def file_md5(path: Path) -> str:
 def media_kind(media_type: str) -> str:
     prefix = media_type.split("/", 1)[0]
     return prefix if prefix in {"image", "video", "audio"} else "other"
+
+
+def thumbnail_path(md5: str) -> Path:
+    return THUMBNAIL_DIR / md5[:2] / f"{md5[2:]}.jpg"
+
+
+def create_thumbnail(source: Path, md5: str) -> Path:
+    destination = thumbnail_path(md5)
+    if destination.is_file():
+        return destination
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".tmp")
+    try:
+        with Image.open(source) as image:
+            image.seek(0)
+            image = ImageOps.exif_transpose(image)
+            image.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
+            if image.mode not in {"RGB", "L"}:
+                background = Image.new("RGB", image.size, "white")
+                if "A" in image.getbands():
+                    background.paste(image, mask=image.getchannel("A"))
+                else:
+                    background.paste(image)
+                image = background
+            elif image.mode == "L":
+                image = image.convert("RGB")
+            image.save(temporary, format="JPEG", quality=82, optimize=True)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination
 
 
 def claim_job() -> str | None:
@@ -61,6 +95,13 @@ def process_job(job_id: str) -> None:
                     or "application/octet-stream"
                 )
                 kind = media_kind(detected_type)
+                if kind == "image":
+                    try:
+                        create_thumbnail(path, md5)
+                    except UnidentifiedImageError:
+                        # Keep browser-supported formats such as SVG in the catalog
+                        # even when Pillow cannot create a raster preview for them.
+                        pass
                 if db.get(UniqueFile, md5) is None:
                     db.add(
                         UniqueFile(

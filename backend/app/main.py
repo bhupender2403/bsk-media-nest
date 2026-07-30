@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+from PIL import UnidentifiedImageError
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -34,7 +35,7 @@ from app.schemas import (
     FolderSelectionResult,
     RatingUpdate,
 )
-from app.worker import run as run_worker
+from app.worker import create_thumbnail, run as run_worker
 
 
 @asynccontextmanager
@@ -270,7 +271,14 @@ def list_folder_files(
             size=record.size,
             md5=record.unique_md5,
             rating=rating,
-            content_url=f"/api/files/{record.id}/content",
+            content_url=(
+                f"/api/files/{record.id}/content?v={record.unique_md5}"
+            ),
+            thumbnail_url=(
+                f"/api/files/{record.id}/thumbnail?v={record.unique_md5}"
+                if record.media_kind == "image"
+                else None
+            ),
         )
         for record, rating in rows
     ]
@@ -325,6 +333,38 @@ def serve_file(
         path,
         media_type=record.media_type,
         filename=Path(record.relative_path).name,
+        content_disposition_type="inline",
+    )
+
+
+@app.get("/api/files/{file_id}/thumbnail", response_class=FileResponse)
+def serve_thumbnail(
+    file_id: int,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    record = db.get(FileRecord, file_id)
+    if record is None or record.media_kind != "image":
+        raise HTTPException(status_code=404, detail="Image not found.")
+    path = Path(record.storage_path).resolve()
+    folder = db.get(ImageFolder, record.folder_id)
+    if folder is None or folder.source_path is None:
+        raise HTTPException(status_code=404, detail="Media folder not found.")
+    source_root = Path(folder.source_path).resolve()
+    if not path.is_relative_to(source_root) or not path.is_file():
+        raise HTTPException(status_code=404, detail="Media content not found.")
+    try:
+        thumbnail = create_thumbnail(path, record.unique_md5)
+    except UnidentifiedImageError:
+        return FileResponse(
+            path,
+            media_type=record.media_type,
+            filename=Path(record.relative_path).name,
+            content_disposition_type="inline",
+        )
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        filename=f"{record.unique_md5}.jpg",
         content_disposition_type="inline",
     )
 

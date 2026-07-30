@@ -11,6 +11,8 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / ".data"
 DATA_DIR = Path(os.getenv("BSK_DATA_DIR", DEFAULT_DATA_DIR)).expanduser().resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+THUMBNAIL_DIR = DATA_DIR / "thumbnails"
+THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
 DATABASE_URL = os.getenv(
     "BSK_DATABASE_URL",
     f"sqlite:///{DATA_DIR / 'bsk-media-nest.db'}",

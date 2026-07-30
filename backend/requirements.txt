@@ -1,4 +1,5 @@
 fastapi==0.115.12
+pillow==11.3.0
 python-dotenv==1.2.2
 sqlalchemy==2.0.41
 uvicorn[standard]==0.34.2
