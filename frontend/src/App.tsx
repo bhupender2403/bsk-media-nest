@@ -56,8 +56,12 @@ type MediaFile = {
 
 type MediaKindFilter = "all" | "image" | "video";
 type RatingFilter = "all" | "unrated" | "1" | "2" | "3" | "4" | "5";
-type SidebarView = "folders" | "jobs";
+type SidebarView = "folders" | "jobs" | "ratings";
 type DisplayMode = "small" | "large" | "slideshow";
+type RatedMediaGroup = {
+  folder: ImageFolder;
+  files: MediaFile[];
+};
 
 export default function App() {
   const [folders, setFolders] = useState<ImageFolder[]>([]);
@@ -74,6 +78,11 @@ export default function App() {
     useState<MediaKindFilter>("all");
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [sidebarView, setSidebarView] = useState<SidebarView>("folders");
+  const [ratedMediaGroups, setRatedMediaGroups] = useState<RatedMediaGroup[]>(
+    [],
+  );
+  const [loadingRatedMedia, setLoadingRatedMedia] = useState(false);
+  const [selectedRatedValue, setSelectedRatedValue] = useState(5);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("large");
   const [selectedSlideId, setSelectedSlideId] = useState<number | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<Set<number>>(
@@ -160,6 +169,41 @@ export default function App() {
     void loadFolders();
     void loadJobs();
   }, [loadFolders, loadJobs]);
+
+  useEffect(() => {
+    if (sidebarView !== "ratings") return;
+    let cancelled = false;
+    setLoadingRatedMedia(true);
+    void Promise.all(
+      folders.map(async (folder) => {
+        const response = await fetch(apiUrl(`/api/folders/${folder.id}/files`));
+        if (!response.ok) throw new Error("Unable to load rated photos");
+        const files = (await response.json()) as MediaFile[];
+        return {
+          folder,
+          files: files.filter(
+            (file) => file.media_kind === "image" && file.rating !== null,
+          ),
+        };
+      }),
+    )
+      .then((groups) => {
+        if (!cancelled) {
+          setRatedMediaGroups(groups.filter((group) => group.files.length > 0));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNotice("Could not load the rated photo collection.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRatedMedia(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sidebarView, folders, mediaRevision]);
 
   const hasActiveJobs = jobs.some(isJobActive);
 
@@ -340,6 +384,31 @@ export default function App() {
       : selectedImages.findIndex(
           (file) => file.id === selectionViewerImage.id,
         );
+  const ratedPhotoCounts = useMemo(
+    () =>
+      [1, 2, 3, 4, 5].reduce<Record<number, number>>((counts, rating) => {
+        counts[rating] = ratedMediaGroups.reduce(
+          (total, group) =>
+            total +
+            group.files.filter((file) => file.rating === rating).length,
+          0,
+        );
+        return counts;
+      }, {}),
+    [ratedMediaGroups],
+  );
+  const visibleRatedMediaGroups = useMemo(
+    () =>
+      ratedMediaGroups
+        .map((group) => ({
+          ...group,
+          files: group.files.filter(
+            (file) => file.rating === selectedRatedValue,
+          ),
+        }))
+        .filter((group) => group.files.length > 0),
+    [ratedMediaGroups, selectedRatedValue],
+  );
 
   const clearImageSelection = useCallback(() => {
     setSelectedImageIds(new Set());
@@ -488,13 +557,35 @@ export default function App() {
             </svg>
             {jobs.some(isJobActive) && <span className="rail-indicator" />}
           </button>
+          <button
+            type="button"
+            className={sidebarView === "ratings" ? "active" : ""}
+            aria-label="Show rated photos"
+            aria-pressed={sidebarView === "ratings"}
+            title="Rated photos"
+            onClick={() => setSidebarView("ratings")}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m12 2.7 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.4 6.3-.9L12 2.7Z" />
+            </svg>
+          </button>
         </nav>
 
         <div className="sidebar-panel">
         <header className="brand">
           <p className="eyebrow">BSK MEDIA NEST</p>
-          <h1>{sidebarView === "folders" ? "Library" : "Imports"}</h1>
-          <p className="message">{notice}</p>
+          <h1>
+            {sidebarView === "folders"
+              ? "Library"
+              : sidebarView === "jobs"
+                ? "Imports"
+                : "Rated photos"}
+          </h1>
+          <p className="message">
+            {sidebarView === "ratings"
+              ? "Rated images grouped by their imported folder."
+              : notice}
+          </p>
         </header>
 
         {sidebarView === "folders" && (
@@ -584,6 +675,30 @@ export default function App() {
           </section>
         )}
 
+        {sidebarView === "ratings" && (
+          <section className="rating-collection-list" aria-label="Photo ratings">
+            <h2>Ratings</h2>
+            {[5, 4, 3, 2, 1].map((rating) => (
+              <button
+                type="button"
+                key={rating}
+                className={selectedRatedValue === rating ? "active" : ""}
+                aria-pressed={selectedRatedValue === rating}
+                onClick={() => setSelectedRatedValue(rating)}
+              >
+                <span aria-hidden="true">
+                  {"★".repeat(rating)}
+                  <i>{"☆".repeat(5 - rating)}</i>
+                </span>
+                <strong>
+                  {rating} {rating === 1 ? "star" : "stars"}
+                </strong>
+                <small>{ratedPhotoCounts[rating] ?? 0}</small>
+              </button>
+            ))}
+          </section>
+        )}
+
         <div className={`status ${connected ? "online" : ""}`}>
           <span aria-hidden="true" />
           {connected ? "Database connected" : "Waiting for database"}
@@ -592,6 +707,69 @@ export default function App() {
       </aside>
 
       <section className="media-browser">
+        {sidebarView === "ratings" ? (
+          <div className="rated-photo-view">
+            <header className="rated-photo-header">
+              <div>
+                <p className="section-label">RATED COLLECTION</p>
+                <h2>
+                  {selectedRatedValue}-star photos by folder
+                </h2>
+              </div>
+              <span>
+                {visibleRatedMediaGroups.reduce(
+                  (total, group) => total + group.files.length,
+                  0,
+                )}{" "}
+                photos
+              </span>
+            </header>
+            {loadingRatedMedia ? (
+              <div className="gallery-empty">Loading rated photos…</div>
+            ) : visibleRatedMediaGroups.length === 0 ? (
+              <div className="gallery-empty">
+                <div className="empty-icon" aria-hidden="true">☆</div>
+                <h3>No {selectedRatedValue}-star photos</h3>
+                <p>Choose another rating or rate more photos.</p>
+              </div>
+            ) : (
+              visibleRatedMediaGroups.map((group) => (
+                <section className="rated-folder-group" key={group.folder.id}>
+                  <header>
+                    <h3>{group.folder.name}</h3>
+                    <span>
+                      {group.files.length}{" "}
+                      {group.files.length === 1 ? "photo" : "photos"}
+                    </span>
+                  </header>
+                  <div className="rated-icon-grid">
+                    {group.files.map((file) => (
+                      <article
+                        className="rated-photo-icon"
+                        key={file.id}
+                        title={`${fileName(file.relative_path)} · ${file.rating} ${
+                          file.rating === 1 ? "star" : "stars"
+                        }`}
+                      >
+                        <img
+                          src={apiUrl(
+                            file.thumbnail_url ?? file.content_url,
+                          )}
+                          alt={fileName(file.relative_path)}
+                          loading="lazy"
+                        />
+                        <span aria-label={`${file.rating} out of 5 stars`}>
+                          ★ {file.rating}
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+          </div>
+        ) : (
+          <>
         {selectedFolder && mediaFiles.length > 0 && (
           <div className="media-filters" aria-label="Media filters">
             <div className="filter-folder">
@@ -1190,6 +1368,8 @@ export default function App() {
               </footer>
             </section>
           </div>
+        )}
+          </>
         )}
       </section>
     </main>
